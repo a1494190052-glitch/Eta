@@ -14,6 +14,7 @@ sealed interface AppRoute : NavKey {
     data object Memory : AppRoute
     data object LinuxEnvironment : AppRoute
     data object ModelProviders : AppRoute
+    data object AcpAgents : AppRoute
     data class ModelProviderDetail(val providerId: String) : AppRoute
     data class ModelProviderNew(val type: NewProviderType) : AppRoute
 }

@@ -244,6 +244,18 @@ internal fun SettingsScreen(
                         onClick = { onNavigate(AppRoute.ModelProviders) },
                     )
                     PrefDivider()
+                    ArrowPreference(
+                        title = stringResource(R.string.route_acp_agents),
+                        summary = stringResource(R.string.acp_agents_settings_summary),
+                        startAction = {
+                            TintedIcon(
+                                icon = LucideR.drawable.lucide_ic_bot,
+                                tint = ColorOSVividGreen,
+                            )
+                        },
+                        onClick = { onNavigate(AppRoute.AcpAgents) },
+                    )
+                    PrefDivider()
                     SwitchPref(
                         context = context,
                         prefs = agentPrefs,

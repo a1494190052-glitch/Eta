@@ -19,6 +19,7 @@ import fuck.andes.agent.device.AgentFileReferenceGateway
 import fuck.andes.agent.device.DeviceLocationProvider
 import fuck.andes.agent.media.AgentImageCodec
 import fuck.andes.agent.memory.AgentMemoryContextBuilder
+import fuck.andes.agent.acp.AcpProfileStore
 import fuck.andes.agent.model.AgentModelClient
 import fuck.andes.agent.model.AgentFileReference
 import fuck.andes.agent.model.AgentFileReferenceKind
@@ -36,6 +37,7 @@ import fuck.andes.config.Prefs
 import fuck.andes.core.AndroidAgentLogger
 import fuck.andes.core.safeLogType
 import fuck.andes.data.model.ModelReasoningCapabilities
+import fuck.andes.data.model.ProviderTypes
 import fuck.andes.data.model.ReasoningEffort
 import fuck.andes.data.repository.AgentMemoryRepository
 import fuck.andes.data.repository.ProviderRepository
@@ -835,17 +837,37 @@ internal class AgentAppState(
             } else {
                 ReasoningEffort.OFF
             }
-            val config = RuntimeConfigRepository.currentRuntimeConfig()?.copy(
-                terminalTools = agentBooleanForUi(Prefs.Keys.AGENT_TERMINAL_TOOLS),
+            val acpProfile = if (AcpProfileStore.isEnabled(appContext)) {
+                AcpProfileStore.selected(appContext)
+            } else {
+                null
+            }
+            val config = if (acpProfile != null) {
+                AgentModelClient.ModelConfig(
+                    providerId = "acp-${acpProfile.id}",
+                    providerName = "ACP · ${acpProfile.name}",
+                    providerType = ProviderTypes.ACP,
+                    providerSourceType = "",
+                    baseUrl = "",
+                    apiKey = "",
+                    model = acpProfile.id,
+                    modelDisplayName = acpProfile.name,
+                    systemPrompt = "",
+                    acpProfileId = acpProfile.id,
+                )
+            } else {
+                RuntimeConfigRepository.currentRuntimeConfig()?.copy(
+                    terminalTools = agentBooleanForUi(Prefs.Keys.AGENT_TERMINAL_TOOLS),
                 browserTools = agentBooleanForUi(Prefs.Keys.AGENT_BROWSER_TOOLS),
                 deviceDirectTools = agentBooleanForUi(Prefs.Keys.AGENT_DEVICE_DIRECT_TOOLS),
                 deviceSensitiveReadTools =
                     agentBooleanForUi(Prefs.Keys.AGENT_DEVICE_SENSITIVE_READ_TOOLS),
                 deviceSensitiveActionTools =
                     agentBooleanForUi(Prefs.Keys.AGENT_DEVICE_SENSITIVE_ACTION_TOOLS),
-                thinkingEnabled = permittedReasoningEffort.enablesReasoning,
-                reasoningEffort = permittedReasoningEffort,
-            )
+                    thinkingEnabled = permittedReasoningEffort.enablesReasoning,
+                    reasoningEffort = permittedReasoningEffort,
+                )
+            }
             if (config == null) {
                 withContext(Dispatchers.Main) {
                     applyRunResult(

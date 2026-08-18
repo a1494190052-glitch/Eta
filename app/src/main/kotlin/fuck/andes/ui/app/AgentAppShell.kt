@@ -155,6 +155,7 @@ private fun titleForRoute(route: AppRoute?): String = when (route) {
     is AppRoute.Memory -> stringResource(R.string.route_memory)
     is AppRoute.LinuxEnvironment -> stringResource(R.string.route_linux_environment)
     is AppRoute.ModelProviders -> stringResource(R.string.route_model_providers)
+    is AppRoute.AcpAgents -> stringResource(R.string.route_acp_agents)
     is AppRoute.ModelProviderDetail -> stringResource(R.string.route_provider_details)
     is AppRoute.ModelProviderNew -> stringResource(R.string.route_new_provider)
     null -> stringResource(R.string.app_name)

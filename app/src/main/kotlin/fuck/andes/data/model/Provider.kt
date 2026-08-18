@@ -7,6 +7,9 @@ internal object ProviderTypes {
     const val OPENAI_COMPATIBLE = "openai_compatible"
     const val ANTHROPIC = "anthropic"
     const val CUSTOM = "custom"
+
+    /** ACP agent 模式：运行外部 ACP agent 进程（codex-acp 等），见 agent.acp 包。 */
+    const val ACP = "acp"
 }
 
 internal object OpenAiEndpointMode {

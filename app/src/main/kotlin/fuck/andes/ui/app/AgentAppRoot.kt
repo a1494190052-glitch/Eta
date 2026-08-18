@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.window.WindowDialog
 import fuck.andes.ui.SettingsScreen
 import fuck.andes.ui.pages.providers.ModelProviderDetailScreen
+import fuck.andes.ui.pages.acp.AcpAgentsScreen
 import fuck.andes.ui.pages.providers.ModelProviderListScreen
 import fuck.andes.ui.model.AgentChatAction
 import fuck.andes.ui.model.AgentHomeAction
@@ -457,6 +458,12 @@ fun AgentAppRoot(
             entry<AppRoute.ModelProviders> {
                 ModelProviderListScreen(
                     onNavigate = { route -> pushRoute(route) },
+                    onBack = ::popRoute
+                )
+            }
+            entry<AppRoute.AcpAgents> {
+                AcpAgentsScreen(
+                    context = context,
                     onBack = ::popRoute
                 )
             }

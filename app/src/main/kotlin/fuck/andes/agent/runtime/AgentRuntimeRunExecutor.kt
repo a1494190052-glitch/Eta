@@ -2,6 +2,7 @@ package fuck.andes.agent.runtime
 
 import android.content.Context
 import fuck.andes.agent.accessibility.AgentAccessibilityKeeper
+import fuck.andes.agent.acp.AcpRuntimeManager
 import fuck.andes.agent.model.AgentModelClient
 import fuck.andes.agent.model.AgentModelExecutionException
 import fuck.andes.agent.model.AgentHttpClient
@@ -17,6 +18,7 @@ import fuck.andes.agent.tool.PendingSkillConflictCapabilityParser
 import fuck.andes.agent.tool.ToolExecutionDecision
 import fuck.andes.core.AndroidAgentLogger
 import fuck.andes.core.safeLogType
+import fuck.andes.data.model.ProviderTypes
 import fuck.andes.data.repository.AgentMemoryRepository
 import kotlinx.coroutines.runBlocking
 
@@ -51,6 +53,9 @@ internal class AgentRuntimeRunExecutor(
         session: AgentRuntimeSession,
         request: AgentRuntimeWire.RunRequest,
     ): Outcome {
+        if (request.config.providerType == ProviderTypes.ACP) {
+            return executeAcpRun(session, request)
+        }
         val runController = session.controller
         val archivedEvents = mutableListOf<AgentEvent>()
         var entrySurfaceGuard: EntrySurfaceGuard? = null
@@ -238,6 +243,87 @@ internal class AgentRuntimeRunExecutor(
             entrySurfaceGuard = entrySurfaceGuard,
             completedRequest = completedRequest.takeIf { committed },
             response = response.takeIf { committed },
+            shouldUpdateHost = committed,
+        )
+    }
+
+    /**
+     * ACP agent 模式的单次 run。
+     *
+     * 与 [execute] 的 LLM 分支共享收尾约定（事件归档、取消、结果提交），
+     * 但模型/工具循环完全由外部 ACP agent 进程承担：prompt 发送给 ACP
+     * session，SessionUpdate 流经 AcpEventTranslator 转成 [AgentEvent]。
+     */
+    private fun executeAcpRun(
+        session: AgentRuntimeSession,
+        request: AgentRuntimeWire.RunRequest,
+    ): Outcome {
+        val archivedEvents = mutableListOf<AgentEvent>()
+        var entrySurfaceGuard: EntrySurfaceGuard? = null
+        var cancelled = false
+
+        val result = try {
+            entrySurfaceGuard = EntrySurfaceGuard.from(request.handoff, AndroidAgentLogger)
+            AcpRuntimeManager.execute(
+                context = appContext,
+                request = request,
+                onEvent = { event ->
+                    acceptEvent(session, event, archivedEvents, entrySurfaceGuard)
+                },
+                isCancelled = { session.controller.isCancelled },
+            )
+        } catch (throwable: Throwable) {
+            cancelled = session.controller.isCancelled ||
+                throwable is AgentRunCancelledException
+            val message = if (cancelled) {
+                "已停止"
+            } else {
+                throwable.message ?: throwable.javaClass.simpleName
+            }
+            if (!cancelled) {
+                AndroidAgentLogger.error(
+                    "ACP runtime failed: type=${throwable.safeLogType()}"
+                )
+                val event = AgentEvent.RunFailed(message)
+                acceptEvent(session, event, archivedEvents, entrySurfaceGuard)
+            }
+            AgentRuntimeWire.RunResult(
+                runId = request.runId,
+                ok = false,
+                content = "",
+                error = message,
+            )
+        }
+
+        if (cancelled) {
+            session.cancel("已停止")
+            return Outcome(
+                result = result,
+                entrySurfaceGuard = entrySurfaceGuard,
+                shouldUpdateHost = true,
+            )
+        }
+
+        val completedRequest = runCatching { snapshotRequest(request) }
+            .getOrElse { throwable ->
+                AndroidAgentLogger.error(
+                    "Agent runtime request snapshot failed: type=${throwable.safeLogType()}"
+                )
+                request
+            }
+        val committed = session.complete(result) {
+            runCatching { persistArtifacts(completedRequest, result, archivedEvents) }
+                .onFailure { throwable ->
+                    AndroidAgentLogger.error(
+                        "Agent runtime artifact persistence failed: type=${throwable.safeLogType()}"
+                    )
+                }
+        }
+        return Outcome(
+            result = result,
+            entrySurfaceGuard = entrySurfaceGuard,
+            completedRequest = completedRequest.takeIf { committed },
+            response = null,
             shouldUpdateHost = committed,
         )
     }
