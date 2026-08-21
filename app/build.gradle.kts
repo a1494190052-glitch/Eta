@@ -127,6 +127,9 @@ dependencies {
     // Kotlinx Serialization：Provider 设置与运行时配置 JSON
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.agent.client.protocol)
+    // ACP SDK 的 kotlin-logging 需要 slf4j；Android 上用 slf4j-android 绑定。
+    implementation(libs.slf4j.api)
+    implementation(libs.slf4j.android)
 
     // Coroutines：显式引入，避免依赖传递版本不确定
     implementation(libs.kotlinx.coroutines.android)

@@ -46,6 +46,8 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 agent-client-protocol = { module = "com.agentclientprotocol:acp", version.ref = "agentClientProtocol" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version = "2.0.18" }
+slf4j-android = { module = "uk.uuid.slf4j:slf4j-android", version = "2.0.17-0" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
