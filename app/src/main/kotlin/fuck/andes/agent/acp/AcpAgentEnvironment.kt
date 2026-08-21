@@ -14,13 +14,15 @@ import kotlinx.coroutines.withContext
  * ACP Agent 一键配置引擎（移植自 OpenOmniBot 的 managed-agent 目录）。
  *
  * OmniBot 的 Agent 模式维护一份「官方 agent 目录」，每个 agent 对应一个
- * 可自动安装的 CLI 运行时（npm 全局包），并提供 discover/install/health
- * 三个操作。Eta 移植版把安装目标固定为 Eta 自己的 Alpine 工具环境
- * （[AlpineEnvironmentPaths.rootfsDir]），全部经 chroot 执行：
+ * 可自动安装的 CLI 运行时，并提供 discover/install/health 三个操作。
+ * 安装目标固定为 Eta 自己的 Alpine 工具环境
+ * （[AlpineEnvironmentPaths.rootfsDir]），全部经 chroot 执行。
  *
- *  - discover   = 在 Alpine 里 `command -v <cmd>` 探测是否已装
- *  - install    = 确保 Alpine 就绪 → apk add nodejs npm → npm install -g <pkgs>
- *  - profile    = 安装成功后自动生成对应的 [AcpAgentProfile] 并写入 [AcpProfileStore]
+ * 安装逻辑对齐 OpenOmniBot `EnvironmentSetupLogic.buildInstallCommands`：
+ *  - 系统包用 apk（含 node-gyp 所需的 build-base，deepseek 需 python3/uv）
+ *  - npm 全局前缀固定 /root/.npm-global，再 ln -s 到 /usr/local/bin
+ *    （/usr/local/bin 已在 chroot PATH 内，保证 ACP 进程能直接启动）
+ *  - apk 失败时用 `apk fix` 修复中断包后重试一次
  *
  * 与 OmniBot 的差异：
  *  - 小万（xiaowan）是 OmniBot 内置 loopback agent，不依赖外部进程，
@@ -35,13 +37,23 @@ internal data class AcpOfficialAgent(
     /** Alpine rootfs 内可见的启动命令（经 chroot 执行）。 */
     val command: String,
     val arguments: List<String> = emptyList(),
-    /** npm 全局包 spec（@scope/pkg@version）。 */
-    val packages: List<String>,
-    /** 安装前必须存在的 Alpine 系统包（nodejs/npm 由引擎统一保证）。 */
-    val extraApkPackages: List<String> = emptyList(),
-    /** 安装成功后建议自动保存为内置 profile。 */
+    /** npm 全局包 spec（@scope/pkg@version），安装到 /root/.npm-global。 */
+    val npmPackages: List<String>,
+    /** 安装前必须存在的 Alpine 系统包（apk add）。 */
+    val apkPackages: List<String> = emptyList(),
+    /** 安装成功后自动保存为内置 profile。 */
     val builtIn: Boolean = true,
 )
+
+/**
+ * Alpine apk 包管理的预置依赖（对齐 OmniBot alpineInstallPackageMap）。
+ * codex/claude/opencode 只需 nodejs+npm+git+bash+curl+ripgrep；
+ * deepseek_harness 额外需要 build-base（gcc/g++/make）+ python3。
+ */
+private object AcpAlpinePackages {
+    val COMMON = listOf("nodejs", "npm", "git", "bash", "curl", "ripgrep")
+    val DEEPSEEK = COMMON + listOf("build-base", "python3")
+}
 
 /** 官方 agent 目录：与 OpenOmniBot OFFICIAL_AGENTS 对齐（去掉内置小万）。 */
 internal object AcpOfficialAgents {
@@ -52,10 +64,11 @@ internal object AcpOfficialAgents {
             description = "OpenAI Codex 官方 ACP 适配器（npm: @openai/codex + @agentclientprotocol/codex-acp）",
             command = "codex-acp",
             arguments = listOf("--stdio"),
-            packages = listOf(
+            npmPackages = listOf(
                 "@openai/codex@latest",
                 "@agentclientprotocol/codex-acp@latest",
             ),
+            apkPackages = AcpAlpinePackages.COMMON,
         ),
         AcpOfficialAgent(
             id = "gemini-cli",
@@ -63,7 +76,8 @@ internal object AcpOfficialAgents {
             description = "Google Gemini CLI 内置 ACP server（npm: @google/gemini-cli）",
             command = "gemini",
             arguments = listOf("--acp"),
-            packages = listOf("@google/gemini-cli@latest"),
+            npmPackages = listOf("@google/gemini-cli@latest"),
+            apkPackages = AcpAlpinePackages.COMMON,
         ),
         AcpOfficialAgent(
             id = "deepseek-harness",
@@ -71,18 +85,19 @@ internal object AcpOfficialAgents {
             description = "DeepSeek Harness 官方 ACP server（npm: @deepseek-ai/dsh-acp-demo）",
             command = "dsh-acp-demo",
             arguments = listOf("--config", "cordis.yml"),
-            packages = listOf("@deepseek-ai/dsh-acp-demo@latest"),
-            extraApkPackages = listOf("git"),
+            npmPackages = listOf("@deepseek-ai/dsh-acp-demo@latest"),
+            apkPackages = AcpAlpinePackages.DEEPSEEK,
         ),
         AcpOfficialAgent(
             id = "claude-code-acp",
             name = "Claude Code",
             description = "Claude Code ACP 适配器（npm: @anthropic-ai/claude-code + @agentclientprotocol/claude-agent-acp）",
             command = "claude-agent-acp",
-            packages = listOf(
+            npmPackages = listOf(
                 "@anthropic-ai/claude-code@latest",
                 "@agentclientprotocol/claude-agent-acp@latest",
             ),
+            apkPackages = AcpAlpinePackages.COMMON,
         ),
         AcpOfficialAgent(
             id = "opencode-acp",
@@ -90,7 +105,8 @@ internal object AcpOfficialAgents {
             description = "OpenCode ACP server（npm: opencode-ai）",
             command = "opencode",
             arguments = listOf("acp"),
-            packages = listOf("opencode-ai@latest"),
+            npmPackages = listOf("opencode-ai@latest"),
+            apkPackages = AcpAlpinePackages.COMMON,
         ),
     )
 
@@ -166,7 +182,7 @@ internal class AcpAgentEnvironmentInstaller(
         onStage(AcpSetupStage.CheckingAlpine)
         val rootfs = AlpineEnvironmentPaths.rootfsDir(context)
         if (AlpineEnvironmentPaths.commonToolsReady(rootfs.absolutePath)) {
-            ensureNodePackages(onStage)
+            ensureBasePackages(onStage)
             return@withContext true
         }
         onStage(AcpSetupStage.InstallingAlpine)
@@ -177,7 +193,7 @@ internal class AcpAgentEnvironmentInstaller(
             is fuck.andes.agent.terminal.AlpineInstallResult.AlreadyReady,
             is fuck.andes.agent.terminal.AlpineInstallResult.Installed,
             -> {
-                ensureNodePackages(onStage)
+                ensureBasePackages(onStage)
                 true
             }
             else -> {
@@ -187,24 +203,24 @@ internal class AcpAgentEnvironmentInstaller(
         }
     }
 
-    /** Alpine 就绪但缺 nodejs/npm 时补装，并配置 npm 镜像源与 node-gyp 构建链。 */
-    private suspend fun ensureNodePackages(onStage: (AcpSetupStage) -> Unit) {
+    /** 配置 npm 镜像源 + 通用 base 工具，幂等可重复执行。 */
+    private suspend fun ensureBasePackages(onStage: (AcpSetupStage) -> Unit) {
         val result = InstallerShellRunner.run(
             command = """
-                # 1) 环境依赖：nodejs/npm + node-gyp 原生编译链
-                if ! command -v node >/dev/null 2>&1; then
-                  apk add --no-cache nodejs npm
-                else
-                  command -v npm >/dev/null 2>&1 || apk add --no-cache npm
-                fi
-                apk add --no-cache python3 make gcc g++ linux-headers >/dev/null 2>&1 || true
-                # 2) npm 全局镜像源（npmmirror 秒下；可被用户 .npmrc 覆盖）
+                set -e
+                # 1) 常用工具（幂等）
+                apk add --no-cache nodejs npm git bash curl ripgrep >/dev/null 2>&1 || true
+                # 2) node-gyp 构建链（node-pty 等原生模块需要）
+                apk add --no-cache build-base python3 >/dev/null 2>&1 || true
+                # 3) npm 镜像源（npmmirror 秒下；可被用户覆盖），并固定全局前缀
                 npm config set registry https://registry.npmmirror.com
                 npm config set prefer-offline true
-                # 3) 二进制镜像（node-gyp / prebuilt 下载走 npmmirror，避免连不上 GitHub）
+                npm config set prefix /root/.npm-global
                 npm config set disturl https://npmmirror.com/mirrors/node
                 npm config set electron_mirror https://npmmirror.com/mirrors/electron/
                 npm config set sass_binary_site https://npmmirror.com/mirrors/node-sass/
+                # 4) 确保 PATH 含 npm-global bin（为后续 npm install -g 的可见性）
+                mkdir -p /root/.npm-global/bin
                 command -v node >/dev/null 2>&1
             """.trimIndent(),
             timeoutSeconds = 900,
@@ -212,7 +228,7 @@ internal class AcpAgentEnvironmentInstaller(
             linuxRootfsPath = rootfsPath(),
         )
         AndroidAgentLogger.info(
-            "acp-setup node outcome=${if (result.exitCode == 0) "ok" else "failed"} " +
+            "acp-setup base outcome=${if (result.exitCode == 0) "ok" else "failed"} " +
                 "exit=${result.exitCode} out=${result.output.takeLast(400)}"
         )
     }
@@ -233,26 +249,8 @@ internal class AcpAgentEnvironmentInstaller(
             writeProfileIfNeeded(agent)
             return@withContext null
         }
-        onStage(AcpSetupStage.InstallingAgent(agent.id, agent.packages.firstOrNull()))
-        val apkPart = if (agent.extraApkPackages.isEmpty()) {
-            ""
-        } else {
-            "apk add --no-cache ${agent.extraApkPackages.joinToString(" ")}\n"
-        }
-        val installCommand = buildString {
-            append("set -e\n")
-            append(apkPart)
-            append("export NPM_CONFIG_REGISTRY=https://registry.npmmirror.com\n")
-            append("export NPM_CONFIG_PREFER_OFFLINE=true\n")
-            append("export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false\n")
-            // 全局前缀固定为 /usr/local，让 bin 落在 /usr/local/bin（已在 chroot PATH 内）
-            append("export NPM_CONFIG_PREFIX=/usr/local\n")
-            append("npm install -g --prefix /usr/local --no-audit --no-fund ")
-            append(agent.packages.joinToString(" "))
-            append("\n")
-            append("command -v ")
-            append(shellQuote(agent.command))
-        }
+        onStage(AcpSetupStage.InstallingAgent(agent.id, agent.npmPackages.firstOrNull()))
+        val installCommand = buildInstallCommand(agent)
         val result = InstallerShellRunner.run(
             command = installCommand,
             timeoutSeconds = NPM_INSTALL_TIMEOUT_SECONDS,
@@ -261,10 +259,10 @@ internal class AcpAgentEnvironmentInstaller(
         )
         if (result.exitCode != 0) {
             AndroidAgentLogger.warn(
-                "acp-setup agent=${agent.id} npm failed exit=${result.exitCode} " +
-                    "out=${result.output.takeLast(1200)}"
+                "acp-setup agent=${agent.id} install failed exit=${result.exitCode} " +
+                    "out=${result.output.takeLast(1500)}"
             )
-            return@withContext "npm install 失败: ${result.output.takeLast(300)}"
+            return@withContext "安装失败: ${result.output.takeLast(300)}"
         }
         onStage(AcpSetupStage.Verifying(agent.id))
         if (!probeAgent(agent)) {
@@ -273,6 +271,39 @@ internal class AcpAgentEnvironmentInstaller(
         writeProfileIfNeeded(agent)
         AndroidAgentLogger.info("acp-setup agent=${agent.id} installed")
         null
+    }
+
+    /**
+     * 生成安装脚本，对齐 OmniBot buildInstallCommands：
+     *  1. 系统包 apk add（含 apk fix 重试）
+     *  2. npm config prefix=/root/.npm-global + PATH
+     *  3. npm install -g 各包
+     *  4. ln -s 把 npm-global/bin/<cmd> 链接到 /usr/local/bin（已在 chroot PATH）
+     *  5. command -v 校验
+     */
+    private fun buildInstallCommand(agent: AcpOfficialAgent): String = buildString {
+        append("set -e\n")
+        // apk 系统包（含修复重试）
+        if (agent.apkPackages.isNotEmpty()) {
+            append(ALPINE_APK_INSTALL_WITH_REPAIR)
+            append("\nomnibot_apk_add ")
+            append(agent.apkPackages.joinToString(" "))
+            append("\n")
+        }
+        // npm 配置
+        append("mkdir -p /root/.npm-global/bin\n")
+        append("export npm_config_registry=https://registry.npmmirror.com\n")
+        append("export npm_config_prefer_offline=true\n")
+        append("export npm_config_audit=false npm_config_fund=false\n")
+        append("export npm_config_prefix=/root/.npm-global\n")
+        append("export PATH=/root/.npm-global/bin:$PATH\n")
+        append("npm install -g --prefix /root/.npm-global --no-audit --no-fund ")
+        append(agent.npmPackages.joinToString(" "))
+        append("\n")
+        // 链接到 /usr/local/bin（chroot PATH 内），保证 ACP 进程能找到
+        append("ln -sf /root/.npm-global/bin/${shellQuote(agent.command)} /usr/local/bin/${shellQuote(agent.command)} || true\n")
+        append("command -v ")
+        append(shellQuote(agent.command))
     }
 
     /** 安装 dsh 时同时生成 cordis.yml（与 RikkaHub proot 工作区配置对齐）。 */
@@ -310,8 +341,21 @@ internal class AcpAgentEnvironmentInstaller(
         AcpProfileStore.save(context, profile)
     }
 
-    companion object {
-        private const val NPM_INSTALL_TIMEOUT_SECONDS = 1_200L
+    private companion object {
+        const val NPM_INSTALL_TIMEOUT_SECONDS = 1_200L
+
+        /** Alpine apk 安装 + 中断修复重试（对齐 OmniBot）。 */
+        const val ALPINE_APK_INSTALL_WITH_REPAIR = """
+            omnibot_apk_add() {
+              omnibot_apk_status=0
+              apk add --no-cache "${'$'}@" || omnibot_apk_status=${'$'}?
+              if [ "${'$'}omnibot_apk_status" -eq 0 ]; then
+                return 0
+              fi
+              apk fix --no-cache || apk fix --no-cache --upgrade || true
+              apk add --no-cache "${'$'}@"
+            }
+        """.trimIndent()
 
         internal const val DSH_CORDIS_YML = """# Generated by Eta ACP setup for DeepSeek Harness.
 # Matches the RikkaHub /workspace/acp configuration (danger-full-access).

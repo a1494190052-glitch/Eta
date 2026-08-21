@@ -112,7 +112,7 @@ private fun AcpSetupSectionContent(
         coroutineScope.launch {
             val failed = mutableListOf<String>()
             for (agent in pending) {
-                stage = AcpSetupStage.InstallingAgent(agent.id, agent.packages.firstOrNull())
+                stage = AcpSetupStage.InstallingAgent(agent.id, agent.npmPackages.firstOrNull())
                 val error = installer.installAgent(agent) { next ->
                     if (next !is AcpSetupStage.InstallingAgent) stage = next
                 }
