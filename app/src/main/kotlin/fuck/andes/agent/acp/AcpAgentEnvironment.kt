@@ -57,6 +57,39 @@ private object AcpAlpinePackages {
 
 /** 官方 agent 目录：与 OpenOmniBot OFFICIAL_AGENTS 对齐（去掉内置小万）。 */
 internal object AcpOfficialAgents {
+    /** DSH 完整插件集（对齐 OmniBot DEEPSEEK_HARNESS_NPM_PACKAGE_NAMES）。 */
+    val DEEPSEEK_HARNESS_NPM_PACKAGES: List<String> = listOf(
+        "@deepseek-ai/dsh",
+        "@deepseek-ai/dsh-acp-demo",
+        "@deepseek-ai/dsh-llm-deepseek",
+        "@deepseek-ai/dsh-llm-pi-ai",
+        "@deepseek-ai/dsh-subprocess-local",
+        "@deepseek-ai/dsh-user-approval",
+        "@deepseek-ai/dsh-mcp-client",
+        "@deepseek-ai/dsh-fs",
+        "@deepseek-ai/dsh-sandbox-policy",
+        "@deepseek-ai/dsh-fs-sandbox",
+        "@deepseek-ai/dsh-fs-observation-policy",
+        "@deepseek-ai/dsh-token-meter",
+        "@deepseek-ai/dsh-compaction-basic",
+        "@deepseek-ai/dsh-session-projection",
+        "@deepseek-ai/dsh-subagent",
+        "@deepseek-ai/dsh-subagent-spawn-in-process",
+        "@deepseek-ai/dsh-subagent-fork-in-process",
+        "@deepseek-ai/dsh-tool-subagent-control",
+        "@deepseek-ai/dsh-tool-subagent-report",
+        "@deepseek-ai/dsh-tool-subagent",
+        "@deepseek-ai/dsh-workflow-worker-thread",
+        "@deepseek-ai/dsh-tool-workflow",
+        "@deepseek-ai/dsh-tool-ralph",
+        "@deepseek-ai/dsh-tool-todo",
+        "@deepseek-ai/dsh-repeat-tool-reminder",
+        "@deepseek-ai/dsh-tool-fs",
+        "@deepseek-ai/dsh-skill",
+        "@deepseek-ai/dsh-skill-filesystem",
+        "@deepseek-ai/dsh-tool-skill",
+    ).map { "$it@latest" }
+
     val ALL: List<AcpOfficialAgent> = listOf(
         AcpOfficialAgent(
             id = "codex-acp",
@@ -82,10 +115,10 @@ internal object AcpOfficialAgents {
         AcpOfficialAgent(
             id = "deepseek-harness",
             name = "DeepSeek Harness",
-            description = "DeepSeek Harness 官方 ACP server（npm: @deepseek-ai/dsh-acp-demo）",
+            description = "DeepSeek Harness 官方 ACP server（npm: @deepseek-ai/dsh-acp-demo + 完整插件集）",
             command = "dsh-acp-demo",
             arguments = listOf("--config", "cordis.yml"),
-            npmPackages = listOf("@deepseek-ai/dsh-acp-demo@latest"),
+            npmPackages = DEEPSEEK_HARNESS_NPM_PACKAGES,
             apkPackages = AcpAlpinePackages.DEEPSEEK,
         ),
         AcpOfficialAgent(
@@ -300,6 +333,11 @@ internal class AcpAgentEnvironmentInstaller(
         append("npm install -g --prefix /root/.npm-global --no-audit --no-fund ")
         append(agent.npmPackages.joinToString(" "))
         append("\n")
+        // DSH 的 node-pty 必须原生编译（对齐 OmniBot repair_deepseek_harness_node_pty）
+        if (agent.id == "deepseek-harness") {
+            append(DSH_NODE_PTY_REPAIR)
+            append("\n")
+        }
         // 链接到 /usr/local/bin（chroot PATH 内），保证 ACP 进程能找到
         append("ln -sf /root/.npm-global/bin/${shellQuote(agent.command)} /usr/local/bin/${shellQuote(agent.command)} || true\n")
         append("command -v ")
@@ -343,6 +381,23 @@ internal class AcpAgentEnvironmentInstaller(
 
     private companion object {
         const val NPM_INSTALL_TIMEOUT_SECONDS = 1_200L
+
+        /** DSH node-pty 修复（对齐 OmniBot repair_deepseek_harness_node_pty）。 */
+        const val DSH_NODE_PTY_REPAIR = """
+            repair_deepseek_harness_node_pty() {
+              node_pty_dir='/root/.npm-global/lib/node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty'
+              if [ -f "${'$'}node_pty_dir/package.json" ] &&
+                 ! node -e 'const { createRequire } = require("node:module"); createRequire("/root/.npm-global/lib/node_modules/@deepseek-ai/dsh-subprocess-local/package.json")("node-pty");' >/dev/null 2>&1; then
+                (
+                  cd "${'$'}node_pty_dir"
+                  node-gyp configure
+                  sed -i 's|^cmd_copy = .*|cmd_copy = rm -rf "${'$'}@" && cp -af "${'$'}<" "${'$'}@"|' build/Makefile
+                  node-gyp build
+                )
+              fi
+            }
+            repair_deepseek_harness_node_pty
+        """.trimIndent()
 
         /** Alpine apk 安装 + 中断修复重试（对齐 OmniBot）。 */
         const val ALPINE_APK_INSTALL_WITH_REPAIR = """
