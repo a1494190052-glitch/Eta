@@ -156,6 +156,9 @@ dependencies {
     // Coroutines：显式引入，避免依赖传递版本不确定
     implementation(libs.kotlinx.coroutines.android)
 
+    // kotlin-logging 依赖 slf4j-api，release R8 需要运行时可见
+    implementation("org.slf4j:slf4j-api:2.0.16")
+
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.room.testing)
