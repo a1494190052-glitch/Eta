@@ -1,5 +1,7 @@
 package fuck.andes.agent.acp
 
+import fuck.andes.agent.terminal.ShellProcessSupervisor
+import fuck.andes.agent.terminal.TerminalEnvironment
 import fuck.andes.core.AndroidAgentLogger
 import java.io.IOException
 import java.io.OutputStreamWriter
@@ -40,6 +42,7 @@ internal class AcpProcessConnection(
     private val stderrLock = Any()
     private val stderrTail = ArrayDeque<String>()
     private var process: Process? = null
+    private var supervisor: ShellProcessSupervisor? = null
     private var readerJob: Job? = null
     private var stderrJob: Job? = null
     private var waitJob: Job? = null
@@ -60,31 +63,55 @@ internal class AcpProcessConnection(
     suspend fun start() {
         if (isRunning) return
         closing = false
-        val command = if (profile.useRoot) {
-            // Termux/Alpine 等私有目录需要 root 才能访问，经 su -c 启动。
-            val joined = (listOf(profile.command) + profile.arguments)
-                .joinToString(" ") { shellQuote(it) }
-            listOf("su", "-c", "exec $joined")
-        } else {
-            buildList {
-                add(profile.command)
-                addAll(profile.arguments)
-            }
-        }
-        AndroidAgentLogger.info(
-            "Starting ACP agent ${profile.id}: " +
-                "${command.joinToString(" ").take(160)}"
-        )
+        val linuxRootfs = profile.linuxRootfsPath.trim()
         val started = try {
             withContext(Dispatchers.IO) {
-                val builder = ProcessBuilder(command)
-                builder.redirectErrorStream(false)
-                if (profile.cwd.isNotBlank()) {
-                    runCatching { builder.directory(java.io.File(profile.cwd)) }
+                if (linuxRootfs.isNotEmpty()) {
+                    // Alpine rootfs 内启动：命令为 rootfs 内路径，经 chroot 运行。
+                    val supervisor = ShellProcessSupervisor()
+                    this@AcpProcessConnection.supervisor = supervisor
+                    val inner = buildString {
+                        if (profile.cwd.isNotBlank()) {
+                            append("cd ")
+                            append(shellQuote(profile.cwd))
+                            append(" && ")
+                        }
+                        append("exec ")
+                        append((listOf(profile.command) + profile.arguments)
+                            .joinToString(" ") { shellQuote(it) })
+                    }
+                    supervisor.startShellProcess(
+                        identity = "root",
+                        command = inner,
+                        mergeStderr = false,
+                        environment = TerminalEnvironment.LINUX,
+                        linuxRootfsPath = linuxRootfs,
+                    ) ?: throw IOException("failed to start ACP agent inside Linux rootfs")
+                } else {
+                    val command = if (profile.useRoot) {
+                        // Termux/Alpine 等私有目录需要 root 才能访问，经 su -c 启动。
+                        val joined = (listOf(profile.command) + profile.arguments)
+                            .joinToString(" ") { shellQuote(it) }
+                        listOf("su", "-c", "exec $joined")
+                    } else {
+                        buildList {
+                            add(profile.command)
+                            addAll(profile.arguments)
+                        }
+                    }
+                    AndroidAgentLogger.info(
+                        "Starting ACP agent ${profile.id}: " +
+                            "${command.joinToString(" ").take(160)}"
+                    )
+                    val builder = ProcessBuilder(command)
+                    builder.redirectErrorStream(false)
+                    if (profile.cwd.isNotBlank()) {
+                        runCatching { builder.directory(java.io.File(profile.cwd)) }
+                    }
+                    builder.environment().putAll(profile.environment)
+                    builder.environment().putAll(extraEnvironment)
+                    builder.start()
                 }
-                builder.environment().putAll(profile.environment)
-                builder.environment().putAll(extraEnvironment)
-                builder.start()
             }
         } catch (error: Throwable) {
             appendDiagnostic("failed to start: ${error.message ?: error.javaClass.simpleName}")
@@ -206,7 +233,15 @@ internal class AcpProcessConnection(
         writer = null
         runCatching { current?.inputStream?.close() }
         runCatching { current?.errorStream?.close() }
-        runCatching { current?.destroy() }
+        val currentSupervisor = supervisor
+        supervisor = null
+        if (current != null && currentSupervisor != null) {
+            // Alpine chroot 进程：supervisor 负责整棵进程树的终止。
+            runCatching { currentSupervisor.terminateProcessTree(current) }
+            runCatching { currentSupervisor.unregisterProcess(current) }
+        } else {
+            runCatching { current?.destroy() }
+        }
         readerJob?.cancelAndJoin()
         stderrJob?.cancelAndJoin()
         waitJob?.cancelAndJoin()

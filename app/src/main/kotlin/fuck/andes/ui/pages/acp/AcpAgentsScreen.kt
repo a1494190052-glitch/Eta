@@ -85,6 +85,11 @@ internal fun AcpAgentsScreen(
                 )
             }
         } else {
+            // ── 一键配置环境（Agent 模式环境设置）─────────────────────
+            AcpSetupSection(
+                context = context,
+                onProfilesChanged = { refresh() },
+            )
             // ── 列表模式 ──────────────────────────────────────────────
             item(key = "intro") {
                 Column(

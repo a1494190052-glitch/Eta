@@ -38,6 +38,13 @@ internal data class AcpAgentProfile(
      * false = 直接取消（MVP 尚不提供运行时审批 UI，先保证流程不断）。
      */
     val allowToolsWithoutPrompt: Boolean = true,
+    /**
+     * 非空时表示命令运行在 Alpine rootfs 内：进程经
+     * [fuck.andes.agent.terminal.InstallerShellRunner] 的 chroot 启动，
+     * command/arguments 为 rootfs 内路径。一键配置引擎写出的官方 profile
+     * 都会带上该字段。
+     */
+    val linuxRootfsPath: String = "",
 ) {
     fun isUsable(): Boolean = enabled && command.isNotBlank()
 
