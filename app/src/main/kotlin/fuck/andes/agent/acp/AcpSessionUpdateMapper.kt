@@ -31,6 +31,10 @@ internal class AcpEventTranslator {
     private var thinkingBlock: BlockState? = null
     private val toolNames = LinkedHashSet<String>()
 
+    /** finish() 关闭块后缓存最终文本/思考，供 accumulatedText() 读取。 */
+    private var finishedText: String = ""
+    private var finishedReasoning: String = ""
+
     /** 处理一条 SessionUpdate，产出 0..n 个 UI 事件。 */
     fun onUpdate(update: SessionUpdate, round: Int): List<AgentEvent> = when (update) {
         is SessionUpdate.AgentMessageChunk -> {
@@ -150,13 +154,16 @@ internal class AcpEventTranslator {
                 contentChars = thinking.content.length,
             )
         }
+        // 缓存最终文本，供 accumulatedText() 在 finish() 后仍能读到（RunResult.content）。
+        finishedText = text?.content?.toString().orEmpty()
+        finishedReasoning = thinking?.content?.toString().orEmpty()
         textBlock = null
         thinkingBlock = null
         if (text != null || thinking != null) {
             events += AgentEvent.AssistantReceived(
                 round = round,
-                contentChars = text?.content?.length ?: 0,
-                reasoningContent = thinking?.content?.toString().orEmpty(),
+                contentChars = finishedText.length,
+                reasoningContent = finishedReasoning,
                 toolNames = toolNames.toList(),
             )
         }
@@ -164,8 +171,14 @@ internal class AcpEventTranslator {
         return events
     }
 
-    /** 当前 turn 累积的 assistant 文本（供 RunResult.content 使用）。 */
-    fun accumulatedText(): String = textBlock?.content?.toString().orEmpty()
+    /**
+     * 当前 turn 累积的 assistant 文本（供 RunResult.content 使用）。
+     *
+     * ACP agent（尤其 DeepSeek Harness）可能只输出思考（AgentThoughtChunk）而
+     * 正文（AgentMessageChunk）为空。此时用思考兜底作为正文，避免界面提示
+     * "有思考却无正文"。
+     */
+    fun accumulatedText(): String = finishedText.ifBlank { finishedReasoning }
 
     private var blockCounter = 0
 
@@ -179,6 +192,8 @@ internal class AcpEventTranslator {
         textBlock = null
         thinkingBlock = null
         toolNames.clear()
+        finishedText = ""
+        finishedReasoning = ""
         resetIndices()
     }
 }
