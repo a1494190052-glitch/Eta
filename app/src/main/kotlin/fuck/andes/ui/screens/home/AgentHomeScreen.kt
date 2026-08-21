@@ -54,6 +54,9 @@ internal fun AgentHomeScreen(
             },
             onRunTraceClick = { onAction(AgentHomeAction.ExpandRunTrace) },
             onOpenBrowser = { onAction(AgentHomeAction.OpenBrowser) },
+            acpAgentEnabled = state.acpAgentEnabled,
+            acpAgentName = state.acpAgentName,
+            onToggleAcpAgent = { enabled -> onAction(AgentHomeAction.ToggleAcpAgent(enabled)) },
             isDrawerOpen = isDrawerOpen,
             modifier = modifier,
         )

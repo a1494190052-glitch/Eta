@@ -118,6 +118,9 @@ internal fun AgentChatInputBar(
     onAttachFilePath: (String) -> Unit,
     onRemoveFileReference: (String) -> Unit,
     onCancelMessageEdit: () -> Unit,
+    acpAgentEnabled: Boolean = false,
+    acpAgentName: String? = null,
+    onToggleAcpAgent: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
@@ -311,6 +314,15 @@ internal fun AgentChatInputBar(
                             Spacer(modifier = Modifier.width(2.dp))
                         }
 
+                        AcpAgentToggleButton(
+                            enabled = acpAgentEnabled,
+                            name = acpAgentName,
+                            isStreaming = isStreaming,
+                            onToggle = { onToggleAcpAgent(!acpAgentEnabled) },
+                        )
+
+                        Spacer(modifier = Modifier.width(2.dp))
+
                         AgentModelPickerButton(
                             state = modelPickerState,
                             isStreaming = isStreaming,
@@ -458,6 +470,57 @@ private fun ThinkingEffortChip(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AcpAgentToggleButton(
+    enabled: Boolean,
+    name: String?,
+    isStreaming: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val contentColor by animateColorAsState(
+        targetValue = if (enabled) {
+            MiuixTheme.colorScheme.primary
+        } else {
+            MiuixTheme.colorScheme.onSurfaceVariantSummary
+        },
+        animationSpec = tween(durationMillis = 160),
+        label = "acp_toggle_content",
+    )
+    val background by animateColorAsState(
+        targetValue = if (enabled) {
+            MiuixTheme.colorScheme.primaryContainer
+        } else {
+            MiuixTheme.colorScheme.surfaceContainerHigh
+        },
+        animationSpec = tween(durationMillis = 160),
+        label = "acp_toggle_background",
+    )
+    val label = if (enabled) (name ?: "Codex") else "ACP"
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(background)
+            .clickable(enabled = !isStreaming, onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(LucideR.drawable.lucide_ic_bot),
+            contentDescription = if (enabled) "ACP 智能体已开启：$label" else "ACP 智能体已关闭",
+            modifier = Modifier.size(15.dp),
+            tint = contentColor,
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MiuixTheme.textStyles.footnote1,
+            color = contentColor,
+            maxLines = 1,
+        )
     }
 }
 

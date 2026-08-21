@@ -6,6 +6,7 @@ sealed interface AgentHomeAction {
     data class ReasoningEffortChanged(val effort: ReasoningEffort) : AgentHomeAction
     data class ModelSelected(val modelId: String) : AgentHomeAction
     data class SubmitMessage(val text: String) : AgentHomeAction
+    data class ToggleAcpAgent(val enabled: Boolean) : AgentHomeAction
     data object StopRun : AgentHomeAction
     data class ImageAttached(val uri: String) : AgentHomeAction
     data class RemoveImage(val id: String) : AgentHomeAction
@@ -36,6 +37,7 @@ sealed interface AgentChatAction {
     data class ReasoningEffortChanged(val effort: ReasoningEffort) : AgentChatAction
     data class ModelSelected(val modelId: String) : AgentChatAction
     data class SubmitMessage(val text: String) : AgentChatAction
+    data class ToggleAcpAgent(val enabled: Boolean) : AgentChatAction
     data object StopRun : AgentChatAction
     data object OpenBrowser : AgentChatAction
     data class ImageAttached(val uri: String) : AgentChatAction

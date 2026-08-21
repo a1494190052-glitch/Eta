@@ -143,6 +143,9 @@ internal fun AgentChatBody(
     onSuggestionClick: (String) -> Unit,
     onRunTraceClick: () -> Unit,
     onOpenBrowser: () -> Unit,
+    acpAgentEnabled: Boolean = false,
+    acpAgentName: String? = null,
+    onToggleAcpAgent: (Boolean) -> Unit = {},
     isDrawerOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -322,6 +325,9 @@ private fun AgentChatScaffold(
                 onAttachFilePath = onAttachFilePath,
                 onRemoveFileReference = onRemoveFileReference,
                 onCancelMessageEdit = onCancelMessageEdit,
+                acpAgentEnabled = acpAgentEnabled,
+                acpAgentName = acpAgentName,
+                onToggleAcpAgent = onToggleAcpAgent,
             )
         },
     ) { innerPadding ->
@@ -797,6 +803,9 @@ private fun AgentChatBottomBar(
     onAttachFilePath: (String) -> Unit,
     onRemoveFileReference: (String) -> Unit,
     onCancelMessageEdit: () -> Unit,
+    acpAgentEnabled: Boolean = false,
+    acpAgentName: String? = null,
+    onToggleAcpAgent: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -879,6 +888,9 @@ private fun AgentChatBottomBar(
                 onAttachFilePath = onAttachFilePath,
                 onRemoveFileReference = onRemoveFileReference,
                 onCancelMessageEdit = onCancelMessageEdit,
+                acpAgentEnabled = acpAgentEnabled,
+                acpAgentName = acpAgentName,
+                onToggleAcpAgent = onToggleAcpAgent,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

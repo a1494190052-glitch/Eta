@@ -18,6 +18,8 @@ internal data class AgentChatUiState(
     val pendingFileReferences: List<PendingFileReferenceUi> = emptyList(),
     val appliedRuntimeRunIds: List<String> = emptyList(),
     val messageEdit: MessageEditUiState? = null,
+    val acpAgentEnabled: Boolean = false,
+    val acpAgentName: String? = null,
 )
 
 @Immutable

@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import fuck.andes.FuckAndesApp
 import fuck.andes.R
 import fuck.andes.agent.accessibility.AgentAccessibilityService
+import fuck.andes.agent.acp.AcpAgentPreferenceStore
+import fuck.andes.agent.acp.CodexAcpRuntime
 import fuck.andes.agent.device.AgentFileReferenceGateway
 import fuck.andes.agent.device.DeviceLocationProvider
 import fuck.andes.agent.media.AgentImageCodec
@@ -92,6 +94,7 @@ internal class AgentAppState(
     skillZipImportGateway: SkillZipImportGateway? = null,
 ) {
     private val appContext = context.applicationContext
+    private val acpPrefs = AcpAgentPreferenceStore(appContext)
     private val skillZipImportGateway = skillZipImportGateway ?: CoreSkillZipImportGateway(appContext)
     private val runConversationIds = mutableMapOf<String, String>()
     private val runMessageProjector = AgentRunMessageProjector()
@@ -116,7 +119,7 @@ internal class AgentAppState(
     private var conversationUpdatedAt: Map<String, Long> = initialConversations.updatedAt
 
     var homeState by mutableStateOf(
-        selectedConversationId?.let(conversationsById::get) ?: emptyChatState(defaultThinkingEnabled)
+        selectedConversationId?.let(conversationsById::get) ?: emptyChatState(defaultThinkingEnabled, acpPrefs.enabled)
     )
         private set
 
@@ -562,7 +565,7 @@ internal class AgentAppState(
         if (homeState.messageEdit != null) cancelMessageEdit()
         fileAttachmentOwnerVersion += 1
         selectedConversationId = null
-        homeState = emptyChatState(defaultThinkingEnabled).withCurrentReasoningCapabilities()
+        homeState = emptyChatState(defaultThinkingEnabled, acpPrefs.enabled).withCurrentReasoningCapabilities()
         conversationPaneState = conversationPaneState.copy(
             selectedConversationId = null,
             searchQuery = "",
@@ -584,7 +587,7 @@ internal class AgentAppState(
                 conversationsById = conversationsById + (nextId to homeState)
             } else {
                 selectedConversationId = null
-                homeState = emptyChatState(defaultThinkingEnabled).withCurrentReasoningCapabilities()
+                homeState = emptyChatState(defaultThinkingEnabled, acpPrefs.enabled).withCurrentReasoningCapabilities()
             }
         }
         conversationPaneState = conversationPaneState.copy(selectedConversationId = selectedConversationId)
@@ -598,6 +601,21 @@ internal class AgentAppState(
         conversationTitles = conversationTitles + (conversationId to trimmed)
         conversationUpdatedAt = conversationUpdatedAt + (conversationId to System.currentTimeMillis())
         refreshConversationSummaries()
+        persistConversations()
+    }
+
+    fun setAcpAgentEnabled(enabled: Boolean) {
+        acpPrefs.enabled = enabled
+        val profile = acpPrefs.selectedProfile()
+        val updated = homeState.copy(
+            acpAgentEnabled = enabled,
+            acpAgentName = if (enabled) profile.name else null,
+        )
+        homeState = updated
+        val conversationId = selectedConversationId
+        if (conversationId != null) {
+            conversationsById = conversationsById + (conversationId to updated)
+        }
         persistConversations()
     }
 
@@ -759,7 +777,7 @@ internal class AgentAppState(
             conversationUpdatedAt = conversationUpdatedAt - conversationId
             fileAttachmentOwnerVersion += 1
             selectedConversationId = null
-            homeState = emptyChatState(defaultThinkingEnabled).withCurrentReasoningCapabilities()
+            homeState = emptyChatState(defaultThinkingEnabled, acpPrefs.enabled).withCurrentReasoningCapabilities()
             conversationPaneState = conversationPaneState.copy(selectedConversationId = null)
             refreshConversationSummaries()
             persistConversations()
@@ -828,6 +846,17 @@ internal class AgentAppState(
         persistConversations()
 
         currentRunJob = scope.launch(Dispatchers.IO) {
+            if (acpPrefs.enabled) {
+                val acpResult = CodexAcpRuntime(appContext).run(
+                    runId = runId,
+                    prompt = prompt,
+                    onEvent = { event -> enqueueRunEvent(runId, event) },
+                )
+                withContext(Dispatchers.Main) {
+                    applyRunResult(runId, acpResult, acknowledgeRuntimeResult = true)
+                }
+                return@launch
+            }
             val permittedReasoningEffort = if (
                 agentBooleanForUi(Prefs.Keys.AGENT_THINKING_ENABLED)
             ) {
@@ -1813,7 +1842,7 @@ internal class AgentAppState(
     private fun moveCurrentDraftToNewConversation() {
         val draft = homeState
         selectedConversationId = null
-        homeState = emptyChatState(defaultThinkingEnabled).copy(
+        homeState = emptyChatState(defaultThinkingEnabled, acpPrefs.enabled).copy(
             input = draft.input,
             thinkingEnabled = draft.reasoningEffort.enablesReasoning,
             reasoningEffort = draft.reasoningEffort,
@@ -1847,8 +1876,8 @@ internal class AgentAppState(
     private fun conversationIdForRun(runId: String): String? = runConversationIds[runId]
 
     private fun conversationStateForRun(runId: String): AgentChatHomeUiState {
-        val conversationId = conversationIdForRun(runId) ?: return emptyChatState(defaultThinkingEnabled)
-        return conversationsById[conversationId] ?: emptyChatState(defaultThinkingEnabled)
+        val conversationId = conversationIdForRun(runId) ?: return emptyChatState(defaultThinkingEnabled, acpPrefs.enabled)
+        return conversationsById[conversationId] ?: emptyChatState(defaultThinkingEnabled, acpPrefs.enabled)
     }
 
     private fun refreshConversationSummaries() {
@@ -1960,13 +1989,19 @@ internal class AgentAppState(
         // 这与 Kimi 将流式数据和视觉动画分层的做法一致。
         const val STREAM_UI_UPDATE_INTERVAL_MS = 80L
 
-        fun emptyChatState(thinkingEnabled: Boolean): AgentChatHomeUiState =
+        fun emptyChatState(
+            thinkingEnabled: Boolean,
+            acpAgentEnabled: Boolean = false,
+            acpAgentName: String? = null,
+        ): AgentChatHomeUiState =
             AgentChatHomeUiState(
                 messages = emptyList(),
                 history = emptyList(),
                 input = "",
                 isStreaming = false,
                 thinkingEnabled = thinkingEnabled,
+                acpAgentEnabled = acpAgentEnabled,
+                acpAgentName = acpAgentName,
             )
 
         fun newConversationId(): String = "conv-${UUID.randomUUID()}"

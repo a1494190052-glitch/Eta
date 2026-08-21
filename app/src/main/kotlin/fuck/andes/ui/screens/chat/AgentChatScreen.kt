@@ -51,6 +51,9 @@ internal fun AgentChatScreen(
             },
             onRunTraceClick = { /* 对话页暂不做 Run trace 展开 */ },
             onOpenBrowser = { onAction(AgentChatAction.OpenBrowser) },
+            acpAgentEnabled = state.acpAgentEnabled,
+            acpAgentName = state.acpAgentName,
+            onToggleAcpAgent = { enabled -> onAction(AgentChatAction.ToggleAcpAgent(enabled)) },
             modifier = modifier,
         )
     }
