@@ -329,7 +329,7 @@ internal class AcpAgentEnvironmentInstaller(
         append("export npm_config_prefer_offline=true\n")
         append("export npm_config_audit=false npm_config_fund=false\n")
         append("export npm_config_prefix=/root/.npm-global\n")
-        append("export PATH=/root/.npm-global/bin:$PATH\n")
+        append("export PATH=/root/.npm-global/bin:\$PATH\n")
         append("npm install -g --prefix /root/.npm-global --no-audit --no-fund ")
         append(agent.npmPackages.joinToString(" "))
         append("\n")
@@ -383,7 +383,7 @@ internal class AcpAgentEnvironmentInstaller(
         const val NPM_INSTALL_TIMEOUT_SECONDS = 1_200L
 
         /** DSH node-pty 修复（对齐 OmniBot repair_deepseek_harness_node_pty）。 */
-        const val DSH_NODE_PTY_REPAIR = """
+        val DSH_NODE_PTY_REPAIR = """
             repair_deepseek_harness_node_pty() {
               node_pty_dir='/root/.npm-global/lib/node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty'
               if [ -f "${'$'}node_pty_dir/package.json" ] &&
@@ -400,7 +400,7 @@ internal class AcpAgentEnvironmentInstaller(
         """.trimIndent()
 
         /** Alpine apk 安装 + 中断修复重试（对齐 OmniBot）。 */
-        const val ALPINE_APK_INSTALL_WITH_REPAIR = """
+        val ALPINE_APK_INSTALL_WITH_REPAIR = """
             omnibot_apk_add() {
               omnibot_apk_status=0
               apk add --no-cache "${'$'}@" || omnibot_apk_status=${'$'}?
