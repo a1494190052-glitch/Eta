@@ -187,11 +187,24 @@ internal class AcpAgentEnvironmentInstaller(
         }
     }
 
-    /** Alpine 就绪但缺 nodejs/npm 时补装。 */
+    /** Alpine 就绪但缺 nodejs/npm 时补装，并配置 npm 镜像源与 node-gyp 构建链。 */
     private suspend fun ensureNodePackages(onStage: (AcpSetupStage) -> Unit) {
         val result = InstallerShellRunner.run(
             command = """
-                command -v node >/dev/null 2>&1 || apk add --no-cache nodejs npm
+                # 1) 环境依赖：nodejs/npm + node-gyp 原生编译链
+                if ! command -v node >/dev/null 2>&1; then
+                  apk add --no-cache nodejs npm
+                else
+                  command -v npm >/dev/null 2>&1 || apk add --no-cache npm
+                fi
+                apk add --no-cache python3 make gcc g++ linux-headers >/dev/null 2>&1 || true
+                # 2) npm 全局镜像源（npmmirror 秒下；可被用户 .npmrc 覆盖）
+                npm config set registry https://registry.npmmirror.com
+                npm config set prefer-offline true
+                # 3) 二进制镜像（node-gyp / prebuilt 下载走 npmmirror，避免连不上 GitHub）
+                npm config set disturl https://npmmirror.com/mirrors/node
+                npm config set electron_mirror https://npmmirror.com/mirrors/electron/
+                npm config set sass_binary_site https://npmmirror.com/mirrors/node-sass/
                 command -v node >/dev/null 2>&1
             """.trimIndent(),
             timeoutSeconds = 900,
@@ -229,8 +242,16 @@ internal class AcpAgentEnvironmentInstaller(
         val installCommand = buildString {
             append("set -e\n")
             append(apkPart)
-            append("npm install -g --no-audit --no-fund ")
+            append("export NPM_CONFIG_REGISTRY=https://registry.npmmirror.com\n")
+            append("export NPM_CONFIG_PREFER_OFFLINE=true\n")
+            append("export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false\n")
+            // 全局前缀固定为 /usr/local，让 bin 落在 /usr/local/bin（已在 chroot PATH 内）
+            append("export NPM_CONFIG_PREFIX=/usr/local\n")
+            append("npm install -g --prefix /usr/local --no-audit --no-fund ")
             append(agent.packages.joinToString(" "))
+            append("\n")
+            append("command -v ")
+            append(shellQuote(agent.command))
         }
         val result = InstallerShellRunner.run(
             command = installCommand,
