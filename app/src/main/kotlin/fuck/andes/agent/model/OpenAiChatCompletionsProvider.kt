@@ -270,6 +270,14 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
             val r = reasoningContent.toString()
             "acp-stream-diagnostic tail content=${c.takeLast(200)} reasoning=${r.takeLast(200)}"
         }
+        // 文件诊断：写入 /data/local/tmp（root 可读），proof 内容流向
+        runCatching {
+            java.io.File("/data/local/tmp/eta-acp-diag.log").appendText(
+                "[${System.currentTimeMillis()}] finish=${finishReason.orEmpty()} " +
+                    "contentChars=${content.length} reasoningChars=${reasoningContent.length} " +
+                    "contentTail=${content.toString().takeLast(120).replace("\n", "\\n")}\n"
+            )
+        }
         toolCalls.values.sortedBy { it.contentIndex }.forEach { call ->
             onEvent(
                 ProviderEvent.BlockEnd(
