@@ -2,6 +2,7 @@ package fuck.andes.agent.model
 
 import fuck.andes.agent.runtime.AgentRunController
 import fuck.andes.agent.runtime.AgentTokenUsage
+import fuck.andes.core.AndroidAgentLogger
 import fuck.andes.data.model.OpenAiEndpointMode
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -307,9 +308,24 @@ internal object OpenAiResponsesProvider : AgentProviderClient {
 
         parseUsage(finalResponse.optJSONObject("usage"))?.let { onEvent(ProviderEvent.Usage(it)) }
         val finishReason = finishReason(terminalType, finalResponse, finalResult.toolCalls.isNotEmpty())
+        // 思考型模型（如 deepseek-v4/fireworks）在 Responses 接口下可能把完整回答写入
+        // reasoning 而 text 为空；用 reasoning 兜底作为正文，避免"有思考却无正文"。
+        val effectiveText = finalResult.text.ifBlank { finalResult.reasoning }
+        runCatching {
+            java.io.File("/data/local/tmp/eta-acp-diag.log").appendText(
+                "[responses] terminal=$terminalType textChars=${finalResult.text.length} " +
+                    "reasoningChars=${finalResult.reasoning.length} " +
+                    "textTail=${finalResult.text.takeLast(120).replace("\n", "\\n")} " +
+                    "reasoningTail=${finalResult.reasoning.takeLast(120).replace("\n", "\\n")}\n"
+            )
+        }
+        AndroidAgentLogger.info(
+            "responses-diagnostic terminal=$terminalType textChars=${finalResult.text.length} " +
+                "reasoningChars=${finalResult.reasoning.length} toolCalls=${finalResult.toolCalls.size}"
+        )
         val assistant = JSONObject()
             .put("role", "assistant")
-            .put("content", finalResult.text)
+            .put("content", effectiveText)
             .put("reasoning_content", finalResult.reasoning)
             .put("finish_reason", finishReason)
         if (finalResult.toolCalls.isNotEmpty()) {
