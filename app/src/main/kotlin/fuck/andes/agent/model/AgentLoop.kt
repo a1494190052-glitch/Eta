@@ -135,14 +135,19 @@ internal class AgentLoop(
             }
 
             val content = assistantMessage.optString("content").trim()
-            if (content.isBlank() || content == "null") {
+            val finalReasoning = assistantMessage.optString("reasoning_content").trim()
+            // 思考型模型（如 deepseek-v4）开启 thinking 且不触发工具时，会把完整回答
+            // 写入 reasoning_content 而 content 为空。此时用 reasoning 兜底作为正文，
+            // 避免出现"有思考却无正文"。
+            val effectiveContent = content.ifBlank { finalReasoning }
+            if (effectiveContent.isBlank() || effectiveContent == "null") {
                 val finishReason = assistantMessage.optString("finish_reason")
                 error("模型接口第 $round 轮返回为空${finishReason.takeIf { it.isNotBlank() }?.let { "：$it" }.orEmpty()}")
             }
 
-            onEvent(AgentEvent.RunFinished(round = round, contentChars = content.length))
+            onEvent(AgentEvent.RunFinished(round = round, contentChars = effectiveContent.length))
             return Result(
-                content = content,
+                content = effectiveContent,
                 reasoningContent = reasoningSnapshot(),
                 sensitiveToolCallIds = sensitiveToolCallIds.toSet(),
             )
