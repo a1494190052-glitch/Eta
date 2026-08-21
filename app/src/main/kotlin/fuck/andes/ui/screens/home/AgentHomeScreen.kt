@@ -57,6 +57,7 @@ internal fun AgentHomeScreen(
             acpAgentEnabled = state.acpAgentEnabled,
             acpAgentName = state.acpAgentName,
             onToggleAcpAgent = { enabled -> onAction(AgentHomeAction.ToggleAcpAgent(enabled)) },
+            onAgentSelected = { agentId -> onAction(AgentHomeAction.SelectAcpAgent(agentId)) },
             isDrawerOpen = isDrawerOpen,
             modifier = modifier,
         )

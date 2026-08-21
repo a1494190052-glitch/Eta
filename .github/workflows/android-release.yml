@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-apks:
-    name: 构建 Debug 与 Release APK
+    name: 构建共存版 Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -43,49 +43,40 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
-      - name: 还原发布证书
-        env:
-          ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
-          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
-          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
-          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
+      - name: 生成发布签名（无正式证书时使用临时 key）
         run: |
-          if [[ -z "$ETA_RELEASE_KEYSTORE_BASE64" ||
-                -z "$ETA_RELEASE_STORE_PASSWORD" ||
-                -z "$ETA_RELEASE_KEY_ALIAS" ||
-                -z "$ETA_RELEASE_KEY_PASSWORD" ]]; then
-            echo "::error::缺少 Release 签名 Secrets，请检查仓库的 Actions Secrets。"
-            exit 1
+          if [[ -n "${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}" ]]; then
+            printf '%s' "${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/eta-release.jks"
+          else
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/eta-release.jks" \
+              -storepass android -keypass android \
+              -alias etarelease -keyalg RSA -keysize 2048 \
+              -validity 10000 -dname "CN=Eta Coexist,OU=Dev,O=Eta,L=Beijing,S=Beijing,C=CN"
           fi
-          printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" \
-            | base64 --decode \
-            > "$RUNNER_TEMP/eta-release.jks"
+          echo "ETA_RELEASE_STORE_FILE=$RUNNER_TEMP/eta-release.jks" >> "$GITHUB_ENV"
+          echo "ETA_RELEASE_STORE_PASSWORD=android" >> "$GITHUB_ENV"
+          echo "ETA_RELEASE_KEY_ALIAS=etarelease" >> "$GITHUB_ENV"
+          echo "ETA_RELEASE_KEY_PASSWORD=android" >> "$GITHUB_ENV"
 
-      - name: 构建 Debug 与 Release APK
-        env:
-          ETA_RELEASE_STORE_FILE: ${{ runner.temp }}/eta-release.jks
-          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
-          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
-          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
+      - name: 构建共存版 Release APK
         run: >-
           ./gradlew --no-daemon --no-configuration-cache
-          :app:assembleDebug :app:assembleRelease
+          :app:assembleCoexistRelease
 
       - name: 验证并整理 APK
         id: apk
         run: |
-          debug_apk="app/build/outputs/apk/debug/app-debug.apk"
-          release_apk="app/build/outputs/apk/release/app-release.apk"
+          release_apk="app/build/outputs/apk/coexist/release/app-coexist-release.apk"
+          if [[ ! -f "$release_apk" ]]; then
+            release_apk="$(find app/build/outputs/apk/coexist/release -name '*.apk' | head -n 1)"
+          fi
           output_dir="$RUNNER_TEMP/apks"
           apksigner_path="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
 
-          if [[ ! -f "$debug_apk" ]]; then
-            echo "::error::未找到 Debug APK。"
-            exit 1
-          fi
           if [[ ! -f "$release_apk" ]]; then
-            echo "::error::未找到 Release APK。"
+            echo "::error::未找到共存版 Release APK。"
             exit 1
           fi
           if [[ -z "$apksigner_path" ]]; then
@@ -95,20 +86,10 @@ jobs:
 
           "$apksigner_path" verify "$release_apk"
           mkdir -p "$output_dir"
-          cp "$debug_apk" "$output_dir/app-debug.apk"
-          cp "$release_apk" "$output_dir/app-release.apk"
-          echo "debug_path=$output_dir/app-debug.apk" >> "$GITHUB_OUTPUT"
-          echo "release_path=$output_dir/app-release.apk" >> "$GITHUB_OUTPUT"
+          cp "$release_apk" "$output_dir/eta-coexist-release.apk"
+          echo "release_path=$output_dir/eta-coexist-release.apk" >> "$GITHUB_OUTPUT"
 
-      - name: 上传 Debug APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          path: ${{ steps.apk.outputs.debug_path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: 上传 Release APK
+      - name: 上传共存版 Release APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           path: ${{ steps.apk.outputs.release_path }}

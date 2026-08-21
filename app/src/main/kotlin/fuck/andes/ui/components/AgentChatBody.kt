@@ -146,6 +146,7 @@ internal fun AgentChatBody(
     acpAgentEnabled: Boolean = false,
     acpAgentName: String? = null,
     onToggleAcpAgent: (Boolean) -> Unit = {},
+    onAgentSelected: (String) -> Unit = {},
     isDrawerOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -242,6 +243,10 @@ internal fun AgentChatBody(
         onRunTraceClick = onRunTraceClick,
         onOpenBrowser = onOpenBrowser,
         currentBrowserMessageId = currentBrowserMessageId,
+        acpAgentEnabled = acpAgentEnabled,
+        acpAgentName = acpAgentName,
+        onToggleAcpAgent = onToggleAcpAgent,
+        onAgentSelected = onAgentSelected,
         modifier = modifier,
     )
 }
@@ -282,6 +287,10 @@ private fun AgentChatScaffold(
     onRunTraceClick: () -> Unit,
     onOpenBrowser: () -> Unit,
     currentBrowserMessageId: String?,
+    acpAgentEnabled: Boolean = false,
+    acpAgentName: String? = null,
+    onToggleAcpAgent: (Boolean) -> Unit = {},
+    onAgentSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val surfaceColor = MiuixTheme.colorScheme.surface
@@ -328,6 +337,7 @@ private fun AgentChatScaffold(
                 acpAgentEnabled = acpAgentEnabled,
                 acpAgentName = acpAgentName,
                 onToggleAcpAgent = onToggleAcpAgent,
+                onAgentSelected = onAgentSelected,
             )
         },
     ) { innerPadding ->
@@ -806,6 +816,7 @@ private fun AgentChatBottomBar(
     acpAgentEnabled: Boolean = false,
     acpAgentName: String? = null,
     onToggleAcpAgent: (Boolean) -> Unit = {},
+    onAgentSelected: (String) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -891,6 +902,7 @@ private fun AgentChatBottomBar(
                 acpAgentEnabled = acpAgentEnabled,
                 acpAgentName = acpAgentName,
                 onToggleAcpAgent = onToggleAcpAgent,
+                onAgentSelected = onAgentSelected,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

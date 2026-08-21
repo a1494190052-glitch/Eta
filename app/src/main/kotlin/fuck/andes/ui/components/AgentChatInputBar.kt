@@ -1,4 +1,5 @@
 package fuck.andes.ui.components
+import fuck.andes.agent.acp.AcpAgentProfiles
 import fuck.andes.R
 import androidx.compose.ui.res.stringResource
 
@@ -121,6 +122,7 @@ internal fun AgentChatInputBar(
     acpAgentEnabled: Boolean = false,
     acpAgentName: String? = null,
     onToggleAcpAgent: (Boolean) -> Unit = {},
+    onAgentSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
@@ -319,6 +321,7 @@ internal fun AgentChatInputBar(
                             name = acpAgentName,
                             isStreaming = isStreaming,
                             onToggle = { onToggleAcpAgent(!acpAgentEnabled) },
+                            onAgentSelected = { agentId -> onAgentSelected(agentId) },
                         )
 
                         Spacer(modifier = Modifier.width(2.dp))
@@ -479,8 +482,11 @@ private fun AcpAgentToggleButton(
     name: String?,
     isStreaming: Boolean,
     onToggle: () -> Unit,
+    onAgentSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    var showAgentPicker by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
     val contentColor by animateColorAsState(
         targetValue = if (enabled) {
             MiuixTheme.colorScheme.primary
@@ -500,27 +506,52 @@ private fun AcpAgentToggleButton(
         label = "acp_toggle_background",
     )
     val label = if (enabled) (name ?: "Codex") else "ACP"
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(background)
-            .clickable(enabled = !isStreaming, onClick = onToggle)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painter = painterResource(LucideR.drawable.lucide_ic_bot),
-            contentDescription = if (enabled) "ACP 智能体已开启：$label" else "ACP 智能体已关闭",
-            modifier = Modifier.size(15.dp),
-            tint = contentColor,
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = label,
-            style = MiuixTheme.textStyles.footnote1,
-            color = contentColor,
-            maxLines = 1,
-        )
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(background)
+                .clickable(enabled = !isStreaming, onClick = { showAgentPicker = true })
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(LucideR.drawable.lucide_ic_bot),
+                contentDescription = if (enabled) "ACP 智能体已开启：$label" else "ACP 智能体已关闭",
+                modifier = Modifier.size(15.dp),
+                tint = contentColor,
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MiuixTheme.textStyles.footnote1,
+                color = contentColor,
+                maxLines = 1,
+            )
+        }
+        WindowListPopup(
+            show = showAgentPicker && !isStreaming,
+            alignment = PopupPositionProvider.Align.TopEnd,
+            enableWindowDim = false,
+            onDismissRequest = { showAgentPicker = false },
+            maxHeight = 320.dp,
+        ) {
+            val dismiss = LocalDismissState.current
+            ListPopupColumn {
+                AcpAgentProfiles.OFFICIAL_AGENTS.forEachIndexed { index, agent ->
+                    DropdownImpl(
+                        text = agent.name,
+                        optionSize = AcpAgentProfiles.OFFICIAL_AGENTS.size,
+                        isSelected = agent.name == name,
+                        index = index,
+                        onSelectedIndexChange = {
+                            onAgentSelected(agent.id)
+                            dismiss?.invoke()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

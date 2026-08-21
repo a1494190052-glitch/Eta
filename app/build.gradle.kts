@@ -34,6 +34,20 @@ android {
         versionName = "2.6.2"
     }
 
+    flavorDimensions += "edition"
+    productFlavors {
+        create("standard") {
+            dimension = "edition"
+            applicationId = "fuck.andes"
+            versionName = "2.6.2"
+        }
+        create("coexist") {
+            dimension = "edition"
+            applicationId = "fuck.andes.coexist"
+            versionName = "2.6.2-coexist"
+        }
+    }
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
@@ -41,6 +55,14 @@ android {
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
+            }
+        } else {
+            create("release") {
+                // 没有正式证书时使用 debug 签名，确保 Release APK 可安装。
+                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             }
         }
     }
@@ -126,6 +148,7 @@ dependencies {
     // OkHttp：替代 HttpURLConnection，支持 SSE
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
+    implementation(libs.agent.client.protocol)
 
     // Kotlinx Serialization：Provider 设置与运行时配置 JSON
     implementation(libs.kotlinx.serialization.json)

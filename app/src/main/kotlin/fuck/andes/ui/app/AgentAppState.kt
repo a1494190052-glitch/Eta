@@ -16,7 +16,7 @@ import fuck.andes.FuckAndesApp
 import fuck.andes.R
 import fuck.andes.agent.accessibility.AgentAccessibilityService
 import fuck.andes.agent.acp.AcpAgentPreferenceStore
-import fuck.andes.agent.acp.CodexAcpRuntime
+import fuck.andes.agent.acp.LocalAcpRuntime
 import fuck.andes.agent.device.AgentFileReferenceGateway
 import fuck.andes.agent.device.DeviceLocationProvider
 import fuck.andes.agent.media.AgentImageCodec
@@ -619,6 +619,22 @@ internal class AgentAppState(
         persistConversations()
     }
 
+    fun selectAcpAgent(agentId: String) {
+        acpPrefs.selectedId = agentId
+        val profile = acpPrefs.selectedProfile()
+        val enabled = acpPrefs.enabled
+        val updated = homeState.copy(
+            acpAgentEnabled = enabled,
+            acpAgentName = if (enabled) profile.name else null,
+        )
+        homeState = updated
+        val conversationId = selectedConversationId
+        if (conversationId != null) {
+            conversationsById = conversationsById + (conversationId to updated)
+        }
+        persistConversations()
+    }
+
     fun sendCurrentMessage(submittedText: String? = null) {
         val prompt = (submittedText ?: homeState.input).trim()
         val pendingImages = homeState.pendingImages
@@ -847,10 +863,15 @@ internal class AgentAppState(
 
         currentRunJob = scope.launch(Dispatchers.IO) {
             if (acpPrefs.enabled) {
-                val acpResult = CodexAcpRuntime(appContext).run(
+                val acpRuntime = LocalAcpRuntime(
+                    context = appContext,
+                    scope = scope,
+                    profileStore = acpPrefs,
+                    onEvent = { event -> enqueueRunEvent(runId, event) },
+                )
+                val acpResult = acpRuntime.runPrompt(
                     runId = runId,
                     prompt = prompt,
-                    onEvent = { event -> enqueueRunEvent(runId, event) },
                 )
                 withContext(Dispatchers.Main) {
                     applyRunResult(runId, acpResult, acknowledgeRuntimeResult = true)

@@ -54,6 +54,7 @@ internal fun AgentChatScreen(
             acpAgentEnabled = state.acpAgentEnabled,
             acpAgentName = state.acpAgentName,
             onToggleAcpAgent = { enabled -> onAction(AgentChatAction.ToggleAcpAgent(enabled)) },
+            onAgentSelected = { agentId -> onAction(AgentChatAction.SelectAcpAgent(agentId)) },
             modifier = modifier,
         )
     }
