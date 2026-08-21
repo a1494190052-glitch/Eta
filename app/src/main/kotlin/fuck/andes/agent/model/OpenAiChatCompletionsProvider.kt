@@ -2,6 +2,7 @@ package fuck.andes.agent.model
 
 import fuck.andes.agent.runtime.AgentRunController
 import fuck.andes.agent.runtime.AgentTokenUsage
+import fuck.andes.core.AndroidAgentLogger
 import fuck.andes.data.model.OpenAiEndpointMode
 import fuck.andes.data.model.ProviderSourceTypes
 import fuck.andes.data.provider.ProviderSourceRegistry
@@ -257,6 +258,17 @@ internal object OpenAiChatCompletionsProvider : AgentProviderClient {
                     content = content.toString(),
                 )
             )
+        }
+        AndroidAgentLogger.info(
+            "acp-stream-diagnostic finish_reason=${finishReason.orEmpty()} " +
+                "contentChars=${content.length} reasoningChars=${reasoningContent.length} " +
+                "toolCalls=${toolCalls.size} hasContentBlock=${textContentIndex != null} " +
+                "hasThinkingBlock=${thinkingContentIndex != null}"
+        )
+        AndroidAgentLogger.debug {
+            val c = content.toString()
+            val r = reasoningContent.toString()
+            "acp-stream-diagnostic tail content=${c.takeLast(200)} reasoning=${r.takeLast(200)}"
         }
         toolCalls.values.sortedBy { it.contentIndex }.forEach { call ->
             onEvent(
