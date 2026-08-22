@@ -43,37 +43,8 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
-      - name: 还原发布证书
-        env:
-          ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
-          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
-          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
-          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
-        run: |
-          if [[ -z "$ETA_RELEASE_KEYSTORE_BASE64" ||
-                -z "$ETA_RELEASE_STORE_PASSWORD" ||
-                -z "$ETA_RELEASE_KEY_ALIAS" ||
-                -z "$ETA_RELEASE_KEY_PASSWORD" ]]; then
-            echo "::warning::缺少 Release 签名 Secrets，本次仅构建 Debug APK。"
-            echo "SKIP_RELEASE=1" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" \
-            | base64 --decode \
-            > "$RUNNER_TEMP/eta-release.jks"
-
       - name: 构建 Debug 与 Release APK
-        env:
-          ETA_RELEASE_STORE_FILE: ${{ runner.temp }}/eta-release.jks
-          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
-          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
-          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
-        run: >-
-          if [[ "$SKIP_RELEASE" == "1" ]]; then
-            ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug
-          else
-            ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug :app:assembleRelease
-          fi
+        run: ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug :app:assembleRelease
 
       - name: 验证并整理 APK
         id: apk
@@ -88,7 +59,7 @@ jobs:
             echo "::error::未找到 Debug APK。"
             exit 1
           fi
-          if [[ "$SKIP_RELEASE" != "1" && ! -f "$release_apk" ]]; then
+          if [[ ! -f "$release_apk" ]]; then
             echo "::error::未找到 Release APK。"
             exit 1
           fi
@@ -100,7 +71,7 @@ jobs:
           mkdir -p "$output_dir"
           cp "$debug_apk" "$output_dir/app-debug.apk"
           echo "debug_path=$output_dir/app-debug.apk" >> "$GITHUB_OUTPUT"
-          if [[ "$SKIP_RELEASE" != "1" ]]; then
+          if [[ -f "$release_apk" ]]; then
             "$apksigner_path" verify "$release_apk"
             cp "$release_apk" "$output_dir/app-release.apk"
             echo "release_path=$output_dir/app-release.apk" >> "$GITHUB_OUTPUT"
@@ -115,7 +86,6 @@ jobs:
           retention-days: 14
 
       - name: 上传 Release APK
-        if: env.SKIP_RELEASE != '1'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           path: ${{ steps.apk.outputs.release_path }}

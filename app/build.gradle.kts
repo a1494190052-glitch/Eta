@@ -6,15 +6,11 @@ plugins {
 }
 
 val releaseStoreFile = System.getenv("ETA_RELEASE_STORE_FILE")
-val releaseStorePassword = System.getenv("ETA_RELEASE_STORE_PASSWORD")
-val releaseKeyAlias = System.getenv("ETA_RELEASE_KEY_ALIAS")
-val releaseKeyPassword = System.getenv("ETA_RELEASE_KEY_PASSWORD")
-val hasReleaseSigning = listOf(
-    releaseStoreFile,
-    releaseStorePassword,
-    releaseKeyAlias,
-    releaseKeyPassword
-).all { !it.isNullOrBlank() }
+    ?: file("signing/eta-release.jks").path
+val releaseStorePassword = System.getenv("ETA_RELEASE_STORE_PASSWORD") ?: "EtaRelease_2026!"
+val releaseKeyAlias = System.getenv("ETA_RELEASE_KEY_ALIAS") ?: "eta-release"
+val releaseKeyPassword = System.getenv("ETA_RELEASE_KEY_PASSWORD") ?: "EtaRelease_2026!"
+val hasReleaseSigning = file(releaseStoreFile).exists()
 
 java {
     toolchain {
