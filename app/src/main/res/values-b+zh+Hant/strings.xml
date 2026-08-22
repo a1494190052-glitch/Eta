@@ -41,6 +41,9 @@
   <string name="route_model_providers">模型供應商</string>
   <string name="route_acp_agents">ACP 智能體</string>
   <string name="acp_agents_settings_summary">與外部 ACP agent 對話（Codex、Gemini CLI、DeepSeek Harness）</string>
+  <string name="acp_toggle_title">ACP 智能體</string>
+  <string name="acp_toggle_summary">透過外部 ACP 智能體處理聊天</string>
+  <string name="acp_toggle_hint">聊天訊息將發給選中的 ACP 智能體，而非模型供應商</string>
   <string name="acp_page_intro">ACP（Agent Client Protocol）智能體以本機程序方式執行，透過 stdio 與 Eta 通訊。選擇一個 agent，聊天訊息將轉給它處理。</string>
   <string name="acp_enable_switch">啟用 ACP 智能體</string>
   <string name="acp_enable_switch_summary">啟用後，聊天訊息將傳送給選中的 ACP agent，而非模型供應商</string>

@@ -8,8 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.composables.icons.lucide.R as LucideR
@@ -108,6 +113,8 @@ private fun AgentTopBar(
     onOpenConversationPane: () -> Unit,
     onNewConversation: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var showAcpToggle by remember { mutableStateOf(false) }
     val isHome = route is AppRoute.Home
     SmallTopAppBar(
         title = titleForRoute(route),
@@ -131,6 +138,12 @@ private fun AgentTopBar(
         },
         actions = {
             if (isHome) {
+                IconButton(onClick = { showAcpToggle = true }) {
+                    Icon(
+                        painter = painterResource(LucideR.drawable.lucide_ic_bot),
+                        contentDescription = stringResource(R.string.acp_enable_switch),
+                    )
+                }
                 IconButton(onClick = onNewConversation) {
                     Icon(
                         painter = painterResource(LucideR.drawable.lucide_ic_message_circle_plus),
@@ -140,6 +153,14 @@ private fun AgentTopBar(
             }
         },
     )
+
+    if (showAcpToggle) {
+        AcpToggleDialog(
+            context = context,
+            show = true,
+            onDismiss = { showAcpToggle = false },
+        )
+    }
 }
 
 @Composable

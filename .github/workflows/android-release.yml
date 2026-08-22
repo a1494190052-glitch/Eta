@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-apks:
-    name: 构建 Debug 与 Release APK
+  build-release:
+    name: 构建 Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -43,22 +43,17 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
-      - name: 构建 Debug 与 Release APK
-        run: ./gradlew --no-daemon --no-configuration-cache :app:assembleDebug :app:assembleRelease
+      - name: 构建 Release APK
+        run: ./gradlew --no-daemon --no-configuration-cache :app:assembleRelease
 
       - name: 验证并整理 APK
         id: apk
         run: |
-          debug_apk="app/build/outputs/apk/debug/app-debug.apk"
           release_apk="app/build/outputs/apk/release/app-release.apk"
           output_dir="$RUNNER_TEMP/apks"
           apksigner_path="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
 
-          if [[ ! -f "$debug_apk" ]]; then
-            echo "::error::未找到 Debug APK。"
-            exit 1
-          fi
           if [[ ! -f "$release_apk" ]]; then
             echo "::error::未找到 Release APK。"
             exit 1
@@ -69,21 +64,9 @@ jobs:
           fi
 
           mkdir -p "$output_dir"
-          cp "$debug_apk" "$output_dir/app-debug.apk"
-          echo "debug_path=$output_dir/app-debug.apk" >> "$GITHUB_OUTPUT"
-          if [[ -f "$release_apk" ]]; then
-            "$apksigner_path" verify "$release_apk"
-            cp "$release_apk" "$output_dir/app-release.apk"
-            echo "release_path=$output_dir/app-release.apk" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 上传 Debug APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          path: ${{ steps.apk.outputs.debug_path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 14
+          "$apksigner_path" verify "$release_apk"
+          cp "$release_apk" "$output_dir/app-release.apk"
+          echo "release_path=$output_dir/app-release.apk" >> "$GITHUB_OUTPUT"
 
       - name: 上传 Release APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

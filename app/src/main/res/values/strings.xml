@@ -42,6 +42,9 @@
   <string name="route_model_providers">Model providers</string>
   <string name="route_acp_agents">ACP Agents</string>
   <string name="acp_agents_settings_summary">Chat with external ACP agents (Codex, Gemini CLI, DeepSeek Harness)</string>
+  <string name="acp_toggle_title">ACP agent</string>
+  <string name="acp_toggle_summary">Route chat through an external ACP agent</string>
+  <string name="acp_toggle_hint">Chat messages will be sent to the selected ACP agent instead of a model provider</string>
   <string name="acp_page_intro">ACP (Agent Client Protocol) agents run as local processes and talk to Eta over stdio. Pick one to route your chat through it.</string>
   <string name="acp_enable_switch">Enable ACP Agents</string>
   <string name="acp_enable_switch_summary">When enabled, chat messages are sent to the selected ACP agent instead of a model provider</string>
