@@ -31,7 +31,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.overlay.WindowDialog
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 /**
  * 首页顶栏弹出的"使用 ACP 智能体"开关浮层。
